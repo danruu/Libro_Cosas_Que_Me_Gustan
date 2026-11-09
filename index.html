@@ -990,33 +990,70 @@ function handleMusicFile(file){
 }
 
 // Fade in al reproducir
+let userPaused = false;
+let unlockAttached = false;
+
+function attachUnlockListeners(){
+  if (unlockAttached) return;
+  unlockAttached = true;
+  ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
+    window.addEventListener(evt, handleUserInteraction, { passive: true });
+  });
+}
+
+function detachUnlockListeners(){
+  if (!unlockAttached) return;
+  unlockAttached = false;
+  ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
+    window.removeEventListener(evt, handleUserInteraction);
+  });
+}
+
+function handleUserInteraction(){
+  if (!userPaused && (bgm.paused || !musicPlaying)) {
+    playMusic(true);
+  }
+}
+
 function playMusic(fadeIn = true){
   if (!musicLoaded) {
     musicPopover.classList.add('open');
     showToast('Selecciona el archivo de la canción para escucharla', 'Elegir archivo', () => musicFileInput.click(), 6000);
     return;
   }
+  userPaused = false;
   const targetVol = parseFloat(musicVol.value) || 0.45;
   if (fadeIn) {
     bgm.volume = 0.05;
-    bgm.play().then(() => {
-      let v = 0.05;
-      const step = () => {
-        v = Math.min(targetVol, v + 0.04);
-        bgm.volume = v;
-        if (v < targetVol && musicPlaying) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    }).catch(e => { console.log('Autoplay bloqueado:', e); });
   } else {
     bgm.volume = targetVol;
-    bgm.play().catch(e => console.log(e));
   }
-  musicPlaying = true;
-  updateMusicUI();
+  const promise = bgm.play();
+  if (promise !== undefined) {
+    promise.then(() => {
+      musicPlaying = true;
+      updateMusicUI();
+      detachUnlockListeners();
+      if (fadeIn) {
+        let v = 0.05;
+        const step = () => {
+          v = Math.min(targetVol, v + 0.04);
+          bgm.volume = v;
+          if (v < targetVol && musicPlaying) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
+    }).catch(e => {
+      console.log('Autoplay bloqueado a la espera de interacción:', e);
+      musicPlaying = false;
+      updateMusicUI();
+      attachUnlockListeners();
+    });
+  }
 }
 
 function pauseMusic(){
+  userPaused = true;
   bgm.pause();
   musicPlaying = false;
   updateMusicUI();
@@ -1030,6 +1067,16 @@ function updateMusicUI(){
     ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>'
     : '<path d="M8 5v14l11-7z"/>';
 }
+
+bgm.addEventListener('play', () => {
+  musicPlaying = true;
+  updateMusicUI();
+  detachUnlockListeners();
+});
+bgm.addEventListener('pause', () => {
+  musicPlaying = false;
+  updateMusicUI();
+});
 
 musicBtn.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -1060,16 +1107,8 @@ window.addEventListener('drop', (e) => {
   }
 });
 
-// Auto-iniciar música desde el inicio y desbloquear en la primera interacción si el navegador lo bloquea
-function unlockAudioOnce(){
-  if (!musicPlaying) playMusic(true);
-  window.removeEventListener('pointerdown', unlockAudioOnce, true);
-  window.removeEventListener('touchstart', unlockAudioOnce, true);
-  window.removeEventListener('keydown', unlockAudioOnce, true);
-}
-window.addEventListener('pointerdown', unlockAudioOnce, true);
-window.addEventListener('touchstart', unlockAudioOnce, true);
-window.addEventListener('keydown', unlockAudioOnce, true);
+// Activar listeners para iniciar música en la primera interacción si autoplay no pudo arrancar
+attachUnlockListeners();
 
 (async () => {
   const savedBlob = await loadMusicBlob();
