@@ -992,20 +992,24 @@ function handleMusicFile(file){
 // Fade in al reproducir
 let userPaused = false;
 let unlockAttached = false;
+const unlockEvents = ['pointerdown', 'mousedown', 'touchstart', 'touchend', 'click', 'keydown'];
+const unlockOpts = { capture: true, passive: true };
 
 function attachUnlockListeners(){
   if (unlockAttached) return;
   unlockAttached = true;
-  ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
-    window.addEventListener(evt, handleUserInteraction, { passive: true });
+  unlockEvents.forEach(evt => {
+    window.addEventListener(evt, handleUserInteraction, unlockOpts);
+    document.addEventListener(evt, handleUserInteraction, unlockOpts);
   });
 }
 
 function detachUnlockListeners(){
   if (!unlockAttached) return;
   unlockAttached = false;
-  ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
-    window.removeEventListener(evt, handleUserInteraction);
+  unlockEvents.forEach(evt => {
+    window.removeEventListener(evt, handleUserInteraction, unlockOpts);
+    document.removeEventListener(evt, handleUserInteraction, unlockOpts);
   });
 }
 
@@ -1034,6 +1038,7 @@ function playMusic(fadeIn = true){
       musicPlaying = true;
       updateMusicUI();
       detachUnlockListeners();
+      toastEl.classList.remove('show');
       if (fadeIn) {
         let v = 0.05;
         const step = () => {
@@ -1048,6 +1053,7 @@ function playMusic(fadeIn = true){
       musicPlaying = false;
       updateMusicUI();
       attachUnlockListeners();
+      showToast('🎵 Toca la pantalla para activar la música', 'Activar', () => playMusic(true), 5000);
     });
   }
 }
